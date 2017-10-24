@@ -1,4 +1,5 @@
 import logging
+from time import sleep
 import boto3 as boto
 from botocore.exceptions import ClientError
 
@@ -12,14 +13,27 @@ class Environment(object):
     def __init__(self, queue_name, bucket_name, function_name, cron_schedule='rate(1 day)'):
         self._queue_name = queue_name
         self._bucket_name = bucket_name
+        self._function_name = function_name,
+        self._cron_schedule = cron_schedule,
         self._s3 = boto.resource('s3')
         self._sqs = boto.resource('sqs')
         self._lambda_client = boto.client('lambda')
-        #self._sqs = boto.sqs.connect_to_region(region_name)
-        #self._s3 = boto.connect_s3(region=region)
-        #self._lambda = boto.awslambda.connect_to_region(region)
         self._queue = None
         self._bucket = None
+
+    def _create_queue_with_pushback(self, name, att_dict):
+        """
+        If a SQS queue is deleted recently (for example during testing), we have to wait 60 secs before recreating.
+        """
+        try:
+            q = self._sqs.create_queue(QueueName=name, Attributes=att_dict)
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'AWS.SimpleQueueService.QueueDeletedRecently':
+                sleep(60)
+                q = self._sqs.create_queue(QueueName=name, Attributes=att_dict)
+            else:
+                raise e
+        return q
 
     def get_queue(self):
         if not self._queue:
@@ -32,12 +46,11 @@ class Environment(object):
                     raise e
             if not q:
                 LOGGER.info('Creating queue {}'.format(self._queue_name))
-                q = self._sqs.create_queue(
-                    QueueName=self._queue_name,
-                    Attributes={
-                        'MessageRetentionPeriod': str(self.TWO_WEEKS)
-                    }
+                q = self._create_queue_with_pushback(
+                    self._queue_name,
+                    {'MessageRetentionPeriod': str(self.TWO_WEEKS)}
                 )
+
             self._queue = q
         return self._queue
 
@@ -55,7 +68,7 @@ class Environment(object):
         if not self._bucket:
             b = self._s3.Bucket(self._bucket_name)
             if not self._bucket_exists(self._bucket_name):
-                LOGGER.error('Creating bucket {}'.format(self._bucket_name))
+                LOGGER.info('Creating bucket {}'.format(self._bucket_name))
                 region_name = boto.session.Session().region_name
                 b = self._s3.create_bucket(
                     Bucket=self._bucket_name,
@@ -74,4 +87,3 @@ class Environment(object):
             for k in b.objects.all():
                 k.delete()
             b.delete()
-        print('Boom')

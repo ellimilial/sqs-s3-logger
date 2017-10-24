@@ -1,22 +1,36 @@
 import datetime
-from unittest import TestCase
+import os
+import tempfile
+from unittest import TestCase, skip
 from sqs_s3_logger.environment import Environment
+from sqs_s3_logger.lambda_function import read_queue, handler
 
 
-class EnvironmentCreation(TestCase):
-
+class EnvironmentMixin(object):
     @classmethod
-    def setUpClass(cls):
+    def _init_environment(cls):
         now = datetime.datetime.now()
         cls.environment = Environment(
-            queue_name='sqs_s3_logger_test',
-            bucket_name='sqs-s3-logger-test-{}'.format(now.isoformat().lower().replace(':', '-')),
+            queue_name='sqs_s3_logger_test-{}'.format(cls.__name__),
+            bucket_name='sqs-s3-logger-test-{}'.format(
+                now.isoformat().lower().replace(':', '-')),
             function_name='sqs_s3_logger_test'
         )
 
     @classmethod
-    def tearDownClass(cls):
+    def _tear_environment(cls):
         cls.environment.destroy(delete_s3_bucket=True)
+
+
+class EnvironmentTest(TestCase, EnvironmentMixin):
+
+    @classmethod
+    def setUpClass(cls):
+        cls._init_environment()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tear_environment()
 
     def test_can_get_queue(self):
         q = self.environment.get_queue()
@@ -26,3 +40,45 @@ class EnvironmentCreation(TestCase):
         b = self.environment.get_bucket()
         self.assertIn('sqs-s3-logger-test', b.name)
         self.assertIsNotNone(b.creation_date)
+
+
+class LambdaFunctionTest(TestCase, EnvironmentMixin):
+    @classmethod
+    def setUpClass(cls):
+        cls._init_environment()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tear_environment()
+
+    def _send_messages_to_the_queue(self, count):
+        q = self.environment.get_queue()
+        for i in range(count):
+            q.send_message(MessageBody='message {}'.format(i))
+
+    def test_can_read_single_message(self):
+        self._send_messages_to_the_queue(1)
+        res = [m for m in read_queue(self.environment.get_queue())]
+        self.assertIsNotNone(res)
+        self.assertEqual(1, len(res))
+        self.assertEqual('message 0', res[0].body)
+
+    def test_handler_uploads_queue_contents_to_bucket(self):
+        self._send_messages_to_the_queue(1)
+        b = self.environment.get_bucket()
+        self.assertEqual(0, sum(1 for _ in b.objects.all()))
+        _, temp_filepath = tempfile.mkstemp()
+        os.environ.update({
+            'QUEUE_NAME': self.environment._queue_name,
+            'BUCKET_NAME': self.environment._bucket_name,
+            'TEMP_FILE_PATH': temp_filepath
+        })
+        handler(None, None)
+        self.assertEqual(1, sum(1 for _ in b.objects.all()))
+
+    @skip('Heavier load test, takes too long to be worth it.')
+    def test_can_handle_many_messages(self):
+        msg_count = 10000
+        self._send_messages_to_the_queue(msg_count)
+        res = [m for m in read_queue(self.environment.get_queue())]
+        self.assertEqual(msg_count, len(res))
