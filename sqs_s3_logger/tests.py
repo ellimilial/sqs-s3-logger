@@ -4,6 +4,7 @@ import tempfile
 from unittest import TestCase, skip
 from sqs_s3_logger.environment import Environment
 from sqs_s3_logger.lambda_function import read_queue, handler
+from sqs_s3_logger.lambda_function_builder import build_package, ROLE_NAME, ROLE_POLICY
 
 
 class EnvironmentMixin(object):
@@ -30,7 +31,7 @@ class EnvironmentTest(TestCase, EnvironmentMixin):
 
     @classmethod
     def tearDownClass(cls):
-        cls._tear_environment()
+        cls.environment.destroy(delete_s3_bucket=True)
 
     def test_can_get_queue(self):
         q = self.environment.get_queue()
@@ -40,6 +41,17 @@ class EnvironmentTest(TestCase, EnvironmentMixin):
         b = self.environment.get_bucket()
         self.assertIn('sqs-s3-logger-test', b.name)
         self.assertIsNotNone(b.creation_date)
+
+    def test_can_create_function(self):
+        package_file = build_package()
+        role_arn = self.environment.update_role_policy(ROLE_NAME, ROLE_POLICY)
+        res = self.environment.update_function(role_arn, package_file)
+        self.assertIsNotNone(res)
+
+    def test_can_create_role_policy(self):
+        r = self.environment.update_role_policy(ROLE_NAME, ROLE_POLICY)
+        self.assertIsNotNone(r)
+        self.assertEqual('LambdaS3WriteSQSRead', r['Role']['RoleName'])
 
 
 class LambdaFunctionTest(TestCase, EnvironmentMixin):
@@ -82,3 +94,10 @@ class LambdaFunctionTest(TestCase, EnvironmentMixin):
         self._send_messages_to_the_queue(msg_count)
         res = [m for m in read_queue(self.environment.get_queue())]
         self.assertEqual(msg_count, len(res))
+
+
+class LambdaFunctionBuilderTest(TestCase):
+    def test_zip_file_is_created(self):
+        archive_path = build_package()
+        self.assertTrue(archive_path.endswith('.zip'))
+        self.assertTrue(os.path.exists(archive_path))

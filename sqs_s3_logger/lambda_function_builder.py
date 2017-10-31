@@ -4,14 +4,49 @@ import pip
 import shutil
 import tempfile
 import datetime
+import logging
+
+LOGGER = logging.getLogger(__name__)
 
 module_path = os.path.dirname(os.path.realpath(__file__))
 
 REQUIRED_PACKAGES = ['boto3==1.4.7.']
 REQUIRED_FILES = ['lambda_function.py']
+ROLE_NAME = 'LambdaS3WriteSQSRead'
+ROLE_POLICY = '''{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "sqs:DeleteMessage",
+                "sqs:GetQueueUrl",
+                "sqs:ReceiveMessage"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+'''
 
 
-def build():
+def build_package():
     build_dir = tempfile.mkdtemp(prefix='lambda_package_')
     install_packages(build_dir, REQUIRED_PACKAGES)
     for f in REQUIRED_FILES:
@@ -19,8 +54,13 @@ def build():
             src=os.path.join(module_path, f),
             dst=os.path.join(build_dir, f)
         )
-    out_file = 'sqs_s3_logger_lambda_{}.zip'.format(
-        datetime.datetime.now().isoformat())
+
+    out_file = os.path.join(
+        tempfile.mkdtemp(prefix='lambda_package_built'),
+        'sqs_s3_logger_lambda_{}.zip'.format(datetime.datetime.now().isoformat())
+    )
+    LOGGER.info('Creating a function package file at {}'.format(out_file))
+
     archive(build_dir, out_file)
     return out_file
 
@@ -30,13 +70,6 @@ def install_packages(dest, packages):
         pip.main(['install', '-t', dest, p])
 
 
-# def archive(srcs, dest, filename='function.zip'):
-#     output_path = os.path.join(dest, filename)
-#     with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as f:
-#         for s in srcs:
-#             f.write(s)
-
-
 def archive(src_dir, output_file):
     with zipfile.ZipFile(output_file, 'w', zipfile.ZIP_DEFLATED) as f:
         for root, _, files in os.walk(src_dir):
@@ -44,4 +77,4 @@ def archive(src_dir, output_file):
                 f.write(os.path.join(root, file))
 
 if __name__ == '__main__':
-    build()
+    build_package()

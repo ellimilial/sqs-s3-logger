@@ -1,4 +1,5 @@
 import logging
+import datetime
 from time import sleep
 import boto3 as boto
 from botocore.exceptions import ClientError
@@ -13,11 +14,12 @@ class Environment(object):
     def __init__(self, queue_name, bucket_name, function_name, cron_schedule='rate(1 day)'):
         self._queue_name = queue_name
         self._bucket_name = bucket_name
-        self._function_name = function_name,
+        self._function_name = function_name
         self._cron_schedule = cron_schedule,
         self._s3 = boto.resource('s3')
         self._sqs = boto.resource('sqs')
         self._lambda_client = boto.client('lambda')
+        self._iam_client = boto.client('iam')
         self._queue = None
         self._bucket = None
 
@@ -79,10 +81,70 @@ class Environment(object):
             self._bucket = b
         return self._bucket
 
-    def destroy(self, delete_s3_bucket=False):
+    def update_function(self, role_arn, filepath, memory_size=128, timeout=300):
+        try:
+            self._lambda_client.get_function(FunctionName=self._function_name)
+            logging.info('Deleting old version of the function {}'.format(self._function_name))
+            self._lambda_client.delete_function(FunctionName=self._function_name)
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ResourceNotFoundException':
+                pass
+            else:
+                raise e
+        uploaded_package_name = '_function/{}{}.zip'.format(self._function_name, datetime.datetime.now())
+        self.get_bucket().upload_file(filepath, uploaded_package_name)
+        res = self._lambda_client.create_function(
+            FunctionName=self._function_name,
+            Runtime='python3.6',
+            Role=role_arn,
+            Handler='lambda_function.handler',
+            Code={
+                'S3Bucket': self._bucket_name,
+                'S3Key': uploaded_package_name,
+            },
+            MemorySize=memory_size,
+            Timeout=timeout
+        )
+        self.get_bucket().delete_objects(Delete={'Objects': [{'Key': uploaded_package_name}]})
+        return res
+
+    def update_role_policy(self, role_name, policy_config):
+        assume_role_policy = '''{
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {
+                        "Service": "lambda.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole"
+                }
+            ]
+        }
+        '''
+        LOGGER.info('Updating role policy {}'.format(role_name))
+        try:
+            self._iam_client.create_role(RoleName=role_name, AssumeRolePolicyDocument=assume_role_policy)
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'EntityAlreadyExists':
+                pass
+            else:
+                raise e
+        self._iam_client.put_role_policy(
+            PolicyDocument=policy_config,
+            PolicyName=role_name+'Policy',
+            RoleName=role_name
+        )
+        return self._iam_client.get_role(RoleName=role_name)['Role']['Arn']
+
+    def destroy(self, delete_function=False, delete_s3_bucket=False):
         LOGGER.info('Deleting queue {}'.format(self._queue_name))
         self.get_queue().delete()
+        if delete_function:
+            LOGGER.info('Deleting function {}').format(self._function_name)
+            self._lambda_client.delete_function(self._function_name)
         if delete_s3_bucket:
+            LOGGER.info('Deleting bucket {}'.format(self._bucket_name))
             b = self.get_bucket()
             for k in b.objects.all():
                 k.delete()
