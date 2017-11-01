@@ -7,6 +7,7 @@ install_reqs = parse_requirements('requirements.txt', session='setup')
 reqs = [str(ir.req) for ir in install_reqs]
 
 
+# TODO package entrypoint correctly
 setup(
     name='sqs-s3-logger',
     version=__version__,

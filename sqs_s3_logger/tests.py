@@ -34,11 +34,11 @@ class EnvironmentTest(TestCase, EnvironmentMixin):
         cls.environment.destroy(delete_s3_bucket=True)
 
     def test_can_get_queue(self):
-        q = self.environment.get_queue()
+        q = self.environment.get_create_queue()
         self.assertIn('sqs_s3_logger_test', q.url)
 
     def test_can_get_bucket(self):
-        b = self.environment.get_bucket()
+        b = self.environment.get_create_bucket()
         self.assertIn('sqs-s3-logger-test', b.name)
         self.assertIsNotNone(b.creation_date)
 
@@ -51,7 +51,7 @@ class EnvironmentTest(TestCase, EnvironmentMixin):
     def test_can_create_role_policy(self):
         r = self.environment.update_role_policy(ROLE_NAME, ROLE_POLICY)
         self.assertIsNotNone(r)
-        self.assertEqual('LambdaS3WriteSQSRead', r['Role']['RoleName'])
+        self.assertIn('LambdaS3WriteSQSRead', r)
 
 
 class LambdaFunctionTest(TestCase, EnvironmentMixin):
@@ -64,20 +64,20 @@ class LambdaFunctionTest(TestCase, EnvironmentMixin):
         cls._tear_environment()
 
     def _send_messages_to_the_queue(self, count):
-        q = self.environment.get_queue()
+        q = self.environment.get_create_queue()
         for i in range(count):
             q.send_message(MessageBody='message {}'.format(i))
 
     def test_can_read_single_message(self):
         self._send_messages_to_the_queue(1)
-        res = [m for m in read_queue(self.environment.get_queue())]
+        res = [m for m in read_queue(self.environment.get_create_queue())]
         self.assertIsNotNone(res)
         self.assertEqual(1, len(res))
         self.assertEqual('message 0', res[0].body)
 
     def test_handler_uploads_queue_contents_to_bucket(self):
         self._send_messages_to_the_queue(1)
-        b = self.environment.get_bucket()
+        b = self.environment.get_create_bucket()
         self.assertEqual(0, sum(1 for _ in b.objects.all()))
         _, temp_filepath = tempfile.mkstemp()
         os.environ.update({
@@ -92,7 +92,7 @@ class LambdaFunctionTest(TestCase, EnvironmentMixin):
     def test_can_handle_many_messages(self):
         msg_count = 10000
         self._send_messages_to_the_queue(msg_count)
-        res = [m for m in read_queue(self.environment.get_queue())]
+        res = [m for m in read_queue(self.environment.get_create_queue())]
         self.assertEqual(msg_count, len(res))
 
 

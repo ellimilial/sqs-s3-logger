@@ -37,7 +37,7 @@ class Environment(object):
                 raise e
         return q
 
-    def get_queue(self):
+    def get_create_queue(self):
         if not self._queue:
             try:
                 q = self._sqs.get_queue_by_name(QueueName=self._queue_name)
@@ -66,7 +66,7 @@ class Environment(object):
             else:
                 raise e
 
-    def get_bucket(self):
+    def get_create_bucket(self):
         if not self._bucket:
             b = self._s3.Bucket(self._bucket_name)
             if not self._bucket_exists(self._bucket_name):
@@ -81,7 +81,7 @@ class Environment(object):
             self._bucket = b
         return self._bucket
 
-    def update_function(self, role_arn, filepath, memory_size=128, timeout=300):
+    def _delete_function_if_exists(self, function_name):
         try:
             self._lambda_client.get_function(FunctionName=self._function_name)
             logging.info('Deleting old version of the function {}'.format(self._function_name))
@@ -91,8 +91,16 @@ class Environment(object):
                 pass
             else:
                 raise e
+
+    def update_function(self, role_arn, filepath, memory_size=128, timeout=300, schedule=None):
+        env_variables = {
+            'QUEUE_NAME': self._queue_name,
+            'BUCKET_NAME': self._bucket_name
+        }
+        self._delete_function_if_exists(function_name=self._function_name)
+
         uploaded_package_name = '_function/{}{}.zip'.format(self._function_name, datetime.datetime.now())
-        self.get_bucket().upload_file(filepath, uploaded_package_name)
+        self.get_create_bucket().upload_file(filepath, uploaded_package_name)
         res = self._lambda_client.create_function(
             FunctionName=self._function_name,
             Runtime='python3.6',
@@ -103,10 +111,41 @@ class Environment(object):
                 'S3Key': uploaded_package_name,
             },
             MemorySize=memory_size,
-            Timeout=timeout
+            Timeout=timeout,
+            Environment={
+                'Variables': env_variables
+            }
         )
-        self.get_bucket().delete_objects(Delete={'Objects': [{'Key': uploaded_package_name}]})
+
+        self.get_create_queue()
+        # TODO This doesn't seem to be deleting the temp function.
+        self.get_create_bucket().delete_objects(Delete={'Objects': [{'Key': uploaded_package_name}]})
+        if schedule:
+            self._schedule_function(res['FunctionArn'], schedule)
+
         return res
+
+    def _schedule_function(self, function_arn, schedule):
+        LOGGER.info('Scheduling function {} to {}'.format(self._function_name, schedule))
+        events_client = boto.client('events')
+        trigger_name = '{}-trigger'.format(self._function_name)
+
+        rule_response = events_client.put_rule(
+            Name=trigger_name,
+            ScheduleExpression=schedule,
+            State='ENABLED',
+        )
+        self._lambda_client.add_permission(
+            FunctionName=self._function_name,
+            StatementId="{0}-Event".format(trigger_name),
+            Action='lambda:InvokeFunction',
+            Principal='events.amazonaws.com',
+            SourceArn=rule_response['RuleArn'],
+        )
+        events_client.put_targets(
+            Rule=trigger_name,
+            Targets=[{'Id': "1", 'Arn': function_arn}]
+        )
 
     def update_role_policy(self, role_name, policy_config):
         assume_role_policy = '''{
@@ -139,13 +178,13 @@ class Environment(object):
 
     def destroy(self, delete_function=False, delete_s3_bucket=False):
         LOGGER.info('Deleting queue {}'.format(self._queue_name))
-        self.get_queue().delete()
+        self.get_create_queue().delete()
         if delete_function:
-            LOGGER.info('Deleting function {}').format(self._function_name)
-            self._lambda_client.delete_function(self._function_name)
+            LOGGER.info('Deleting function {}'.format(self._function_name))
+            self._lambda_client.delete_function(FunctionName=self._function_name)
         if delete_s3_bucket:
             LOGGER.info('Deleting bucket {}'.format(self._bucket_name))
-            b = self.get_bucket()
+            b = self.get_create_bucket()
             for k in b.objects.all():
                 k.delete()
             b.delete()

@@ -15,6 +15,16 @@ Make sure you setup:
 - `AWS_SECRET_ACCESS_KEY`
 - `AWS_DEFAULT_REGION` (optionally)
 
+Take a look at `main.py`.
+
+For help: `python3 main.py -h` 
+
+For example (backup at midnight each Saturday): 
+```
+python3 main.py -b app-logs -q app-logs -f app-logs-backup -s 'cron(0 0 ? * SAT *)'
+```
+
+
 ## Limitations
 - Maximum SQS message size is limited to 256 KB
 - There could be no more than 120,000 messages in a queue at a time.

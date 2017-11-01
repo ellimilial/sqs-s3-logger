@@ -10,7 +10,7 @@ LOGGER = logging.getLogger(__name__)
 
 module_path = os.path.dirname(os.path.realpath(__file__))
 
-REQUIRED_PACKAGES = ['boto3==1.4.7.']
+REQUIRED_PACKAGES = []
 REQUIRED_FILES = ['lambda_function.py']
 ROLE_NAME = 'LambdaS3WriteSQSRead'
 ROLE_POLICY = '''{
@@ -37,6 +37,7 @@ ROLE_POLICY = '''{
         {
             "Effect": "Allow",
             "Action": [
+                "s3:ListBucket",
                 "s3:PutObject"
             ],
             "Resource": "*"
@@ -72,9 +73,11 @@ def install_packages(dest, packages):
 
 def archive(src_dir, output_file):
     with zipfile.ZipFile(output_file, 'w', zipfile.ZIP_DEFLATED) as f:
+        src_dir_len = len(src_dir)
         for root, _, files in os.walk(src_dir):
             for file in files:
-                f.write(os.path.join(root, file))
+                fn = os.path.join(root, file)
+                f.write(fn, fn[src_dir_len+1:])
 
 if __name__ == '__main__':
     build_package()
