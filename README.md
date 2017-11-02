@@ -1,7 +1,11 @@
 # sqs-s3-logger
 
 A library to persist messages on S3 using serverless architecture. 
-It is mainly targeted at cheaply archiving low-volume, sporadic logs from applications without a need to spin additional infrastructure.  
+It is mainly targeted at cheaply archiving low-volume, sporadic events from applications without a need to spin additional infrastructure.  
+<p text-align="center">
+
+![Overall idea](assets/graph-overview.png?raw=true "Title")
+</p>
 
 #### What it's not
 Not a replacement for general logging systems or libraries. Provides no filtering or aggregation.
@@ -19,9 +23,9 @@ Take a look at `main.py`.
 
 For help: `python3 main.py -h` 
 
-For example (backup at midnight each Saturday): 
+For example (backup at midnight each Saturday from `app-logs` queue to `app-logs-archive` bucket): 
 ```
-python3 main.py -b app-logs -q app-logs -f app-logs-backup -s 'cron(0 0 ? * SAT *)'
+python3 main.py -b app-logs-archive -q app-logs -f app-logs-backup -s 'cron(0 0 ? * SAT *)'
 ```
 
 
@@ -38,3 +42,4 @@ You may need to adjust your CRON settings depending on your volume.
 `python3 setup.py test`
 
 These will use your AWS account to instantiate a temporary integration environment.  
+
