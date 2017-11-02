@@ -4,3 +4,4 @@ venv
 *.egg-info
 *.egg
 *.DS_Store
+dist

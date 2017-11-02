@@ -1,7 +1,7 @@
 from setuptools import setup
 from pip.req import parse_requirements
+from sqs_s3_logger import __version__
 
-exec(open('sqs_s3_logger/version.py').read())
 
 install_reqs = parse_requirements('requirements.txt', session='setup')
 reqs = [str(ir.req) for ir in install_reqs]
@@ -13,5 +13,10 @@ setup(
     version=__version__,
     install_require=reqs,
     tests_require=reqs,
-    description='Logging to Amazon\'s S3 via SQS.',
+    url='https://github.com/ellimilial/sqs-s3-logger',
+    download_url='https://github.com/ellimilial/sqs-s3-logger/releases/tag/'.format(__version__),
+    author='Mateusz Kaczyński',
+    author_email='contact@ellimilial.com',
+    description='Store arbitrary messages to Amazon\'s S3 via SQS.',
+    keywords=['logging', 'sqs', 's3', 'archive', 'storage']
 )
