@@ -27,10 +27,10 @@ def purge(args):
     env.destroy(delete_function=True)
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('command', nargs='?', default='create',
-                        help='create(by default) / purge'),
+                        help='create(default) / purge'),
     parser.add_argument('-b', '--bucket', required=True,
                         help='Name of the bucket to drop logs to')
     parser.add_argument('-q', '--queue',  required=True,
@@ -46,3 +46,5 @@ if __name__ == '__main__':
         purge(args)
 
 
+if __name__ == '__main__':
+    main()
