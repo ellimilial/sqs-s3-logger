@@ -8,13 +8,20 @@ applications without a need to spin additional infrastructure.
 |Overall idea|
 
 What it’s not
-^^^^^^^^^^^^^
+-------------
 
 Not a replacement for general logging systems or libraries. Provides no
 filtering or aggregation.
 
+AWS Alternatives
+-------------
+
+- `Cloudwach Logs`_
+- `Kinesis Firehose`_
+
+
 Usage
------
+=====
 
 Configure ``boto3``\ ’s credentials as per:
 http://boto3.readthedocs.io/en/latest/guide/quickstart.html#configuration
@@ -37,7 +44,7 @@ For example (backup at midnight each Saturday from ``app-logs`` queue to
     sqs-s3-logger create -b app-logs-archive -q app-logs -f app-logs-backup -s 'cron(0 0 ? * SAT *)'
 
 Sending messages to a queue
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------
 
 Ideally you should use another AWS IAM user with permissions restricted
 to getting SQS queues and writing messages.
@@ -50,7 +57,7 @@ to getting SQS queues and writing messages.
     queue.send_message(MessageBody='<MSG_BODY_NOT_EXCEEDING_256KB>')
 
 Limitations
------------
+===========
 
 -  Maximum SQS message size is limited to 256 KB
 -  There could be no more than 120,000 messages in a queue at a time.
@@ -61,7 +68,7 @@ Limitations
 You may need to adjust your CRON settings depending on your volume.
 
 Testing
--------
+=======
 
 ``python3 setup.py test``
 
@@ -69,3 +76,5 @@ These will use your AWS account to instantiate a temporary integration
 environment.
 
 .. |Overall idea| image:: assets/graph-overview.png?raw=true :
+.. _Kinesis Firehose: https://aws.amazon.com/kinesis/firehose/
+.. _Cloudwach logs: https://aws.amazon.com/cloudwatch/details/#log-monitoring

@@ -16,6 +16,7 @@ setup(
     install_requires=reqs,
     tests_require=reqs,
     packages=['sqs_s3_logger'],
+    include_package_date=True,
     entry_points={
         'console_scripts': ['sqs-s3-logger=sqs_s3_logger.main:main'],
     },
