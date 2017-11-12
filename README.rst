@@ -14,11 +14,10 @@ Not a replacement for general logging systems or libraries. Provides no
 filtering or aggregation.
 
 AWS Alternatives
--------------
+----------------
 
 - `Cloudwach Logs`_
 - `Kinesis Firehose`_
-
 
 Usage
 =====
@@ -44,7 +43,7 @@ For example (backup at midnight each Saturday from ``app-logs`` queue to
     sqs-s3-logger create -b app-logs-archive -q app-logs -f app-logs-backup -s 'cron(0 0 ? * SAT *)'
 
 Sending messages to a queue
--------------
+---------------------------
 
 Ideally you should use another AWS IAM user with permissions restricted
 to getting SQS queues and writing messages.
